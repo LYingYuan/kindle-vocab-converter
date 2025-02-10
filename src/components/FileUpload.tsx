@@ -3,44 +3,16 @@
 import React, { useState, useEffect } from "react";
 import { Upload } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Database } from "sql.js";
-
-interface BookInfo {
-  id: string;
-  asin: string;
-  guid: string;
-  lang: string;
-  title: string;
-  authors: string;
-}
-
-interface Lookup {
-  id: string;
-  word_key: string;
-  book_key: string;
-  dict_key: string;
-  pos: string;
-  usage: string;
-  timestamp: string;
-}
-
-interface Word {
-  id: string;
-  word: string;
-  stem: string;
-  lang: string;
-  category: string;
-  timestamp: string;
-  profiled: string;
-}
+import { SqlJsStatic } from "sql.js";
+import { useRouter } from "next/navigation";
+import { vocabDB } from "@/lib/db";
 
 const FileUpload: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState<boolean>(false);
-  const [db, setDb] = useState<Database | null>(null);
-  const [SQL, setSQL] = useState<any>(null);
+  const [SQL, setSQL] = useState<SqlJsStatic | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const initSQL = async () => {
@@ -80,6 +52,11 @@ const FileUpload: React.FC = () => {
       }
     };
 
+    vocabDB.init().catch(error => {
+      console.error("Failed to initialize IndexedDB:", error);
+      setError("Failed to initialize database");
+    });
+
     initSQL();
   }, []);
 
@@ -114,8 +91,69 @@ const FileUpload: React.FC = () => {
         );
       }
 
-      setDb(database);
+      // Clear existing database
+      await vocabDB.clearDatabase();
+
+      const booksResult = database.exec(`
+        SELECT DISTINCT b.*
+        FROM BOOK_INFO b
+        INNER JOIN LOOKUPS l ON b.id = l.book_key
+        ORDER BY b.title
+      `);
+
+      if (booksResult[0]) {
+        const books = booksResult[0].values.map(row => ({
+          id: row[0] as string,
+          asin: row[1] as string,
+          guid: row[2] as string,
+          lang: row[3] as string,
+          title: row[4] as string,
+          authors: row[5] as string,
+        }));
+        await vocabDB.saveBooks(books);
+      }
+
+      const wordsResult = database.exec(`
+        SELECT DISTINCT w.*
+        FROM WORDS w
+        INNER JOIN LOOKUPS l ON w.id = l.word_key
+        ORDER BY w.word
+      `);
+
+      if (wordsResult[0]) {
+        const words = wordsResult[0].values.map(row => ({
+          id: row[0] as string,
+          word: row[1] as string,
+          stem: row[2] as string,
+          lang: row[3] as string,
+          category: row[4] as string,
+          timestamp: row[5] as string,
+          profiled: row[6] as string,
+        }));
+        await vocabDB.saveWords(words);
+      }
+
+      const lookupsResult = database.exec(`
+        SELECT l.*
+        FROM LOOKUPS l
+        ORDER BY l.timestamp DESC
+      `);
+
+      if (lookupsResult[0]) {
+        const lookups = lookupsResult[0].values.map(row => ({
+          id: row[0] as string,
+          word_key: row[1] as string,
+          book_key: row[2] as string,
+          dict_key: row[3] as string,
+          pos: row[4] as string,
+          usage: row[5] as string,
+          timestamp: row[6] as string,
+        }));
+        await vocabDB.saveLookups(lookups);
+      }
+
       setSuccess(true);
+      router.push("/vocabulary");
     } catch (error) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
@@ -124,15 +162,16 @@ const FileUpload: React.FC = () => {
   };
 
   return (
-    <div>
-      <div>
-        <label>
-          <Upload></Upload>
-          <span>
+    <div className="w-full max-w-md mx-auto space-y-4">
+      <div className="flex flex-col items-center space-y-2 w-full h-48 border-2 border-dashed rounded-lg border-gray-300 bg-gray-50 hover:bg-gray-100">
+        <label className="flex flex-col items-center justify-center w-full h-full cursor-pointer">
+          <Upload className="w-12 h-12 text-gray-400"></Upload>
+          <span className="mt-2 text-sm text-gray-500">
             {isLoading ? "Processing..." : "Upload your Kindle Vocab.db file"}
           </span>
           <input
             type="file"
+            className="hidden"
             accept=".db"
             onChange={handleFileUpload}
             disabled={isLoading}
