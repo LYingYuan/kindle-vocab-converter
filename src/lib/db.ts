@@ -220,6 +220,49 @@ class VocabDB {
     });
   }
 
+  async deleteLookup(lookupId: string): Promise<void> {
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
+
+    const transaction = this.db.transaction("lookups", "readwrite");
+    const store = transaction.objectStore("lookups");
+
+    return new Promise((resolve, reject) => {
+      const request = store.delete(lookupId);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async deleteWord(wordId: string): Promise<void> {
+    if (!this.db) {
+      throw new Error("Database not initialized");
+    }
+
+    const transaction = this.db.transaction(["words", "lookups"], "readwrite");
+    const wordStore = transaction.objectStore("words");
+    const lookupStore = transaction.objectStore("lookups");
+    const lookupIndex = lookupStore.index("word_key");
+
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+
+      wordStore.delete(wordId);
+
+      const lookupRequest = lookupIndex.openCursor(IDBKeyRange.only(wordId));
+      lookupRequest.onsuccess = () => {
+        const cursor = lookupRequest.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+    });
+  }
+
   private async getWord(wordId: string): Promise<Word | null> {
     if (!this.db) {
       throw new Error("Database not initialized");

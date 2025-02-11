@@ -1,29 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { WordList } from "@/components/WordList";
-import { WordWithContext } from "@/types";
 import { vocabDB } from "@/lib/db";
+import { WordWithContext } from "@/types";
 
 export default function VocabularyPage() {
-  const [allWords, setAllWords] = useState<WordWithContext[]>([]);
+  const [words, setWords] = useState<WordWithContext[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadWords = async () => {
     try {
-      const wordsData = await vocabDB.getAllWords();
-      setAllWords(wordsData);
+      const allWords = await vocabDB.getAllWords();
+      setWords(allWords);
     } catch (error) {
-      console.error("Error loading data:", error);
+      console.error("Error loading words:", error);
     }
   };
 
+  useEffect(() => {
+    loadWords();
+  }, []);
+
   return (
-    <div className="container mx-auto p-6">
-      <WordList words={allWords} />
+    <div className="container mx-auto py-8">
+      <WordList words={words} onWordsUpdate={loadWords} />
     </div>
   );
 }
