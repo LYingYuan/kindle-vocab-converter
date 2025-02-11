@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 import { WordWithContext, Lookup } from "@/types";
 import { Download } from "lucide-react";
 
@@ -9,6 +10,9 @@ interface WordListProps {
 }
 
 export const WordList: React.FC<WordListProps> = ({ words }) => {
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+
   const highlightWord = (word: string, text: string) => {
     if (!text) return text;
     const regex = new RegExp(`\\b(${word})\\b`, "gi");
@@ -29,10 +33,14 @@ export const WordList: React.FC<WordListProps> = ({ words }) => {
   };
 
   const exportToAnki = () => {
-    const tsvContent = words
+    const filteredWords = filterWordsByDate(words);
+    const tsvContent = filteredWords
       .map(word => {
         const latest = getLatestLookup(word.lookups);
-        const usage = latest.usage.replace(word.word, `<strong>${word.word}</strong>`);
+        const usage = latest.usage.replace(
+          word.word,
+          `<strong>${word.word}</strong>`
+        );
         return `${word.word}\t${usage}`;
       })
       .join("\n");
@@ -49,18 +57,57 @@ export const WordList: React.FC<WordListProps> = ({ words }) => {
     URL.revokeObjectURL(url);
   };
 
+  const filterWordsByDate = (words: WordWithContext[]) => {
+    if (!dateFrom || !dateTo) return words;
+
+    return words.filter(word => {
+      const latestLookup = getLatestLookup(word.lookups);
+      const lookupDate = new Date(latestLookup.timestamp);
+      const fromDate = new Date(dateFrom);
+      const toDate = new Date(dateTo);
+
+      if (fromDate && toDate) {
+        return lookupDate >= fromDate && lookupDate <= toDate;
+      } else if (fromDate) {
+        return lookupDate >= fromDate;
+      } else if (toDate) {
+        return lookupDate <= toDate;
+      }
+      return true;
+    });
+  };
+
+  const filterWords = filterWordsByDate(words);
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end mb-4">
-        <button
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex space-x-4">
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={e => setDateFrom(e.target.value)}
+            className="w-40"
+            placeholder="Start date"
+          ></Input>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={e => setDateTo(e.target.value)}
+            className="w-40"
+            placeholder="End date"
+          ></Input>
+        </div>
+
+        <Button
           onClick={exportToAnki}
           className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
         >
           <Download className="w-4 h-4"></Download>
           Export to Anki
-        </button>
+        </Button>
       </div>
-      {words.map(word => {
+      {filterWords.map(word => {
         const latestContext = getLatestLookup(word.lookups);
 
         return (
